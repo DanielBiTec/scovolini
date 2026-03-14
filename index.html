@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Scovolini</title>
+
+<!-- PWA -->
+<meta name="theme-color" content="#0f1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Scovolini">
+<link rel="manifest" id="pwa-manifest">
+<script>
+// Inline manifest (no separate file needed)
+const manifest = {
+  name: "Scovolini",
+  short_name: "Scovolini",
+  description: "Tracker scovolini interdentali",
+  start_url: ".",
+  display: "standalone",
+  background_color: "#0f1117",
+  theme_color: "#0f1117",
+  orientation: "portrait",
+  icons: [
+    { src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' fill='%230f1117' rx='80'/%3E%3Ccircle cx='176' cy='256' r='40' fill='%234ade80'/%3E%3Ccircle cx='256' cy='256' r='40' fill='%23fde047'/%3E%3Ccircle cx='336' cy='256' r='40' fill='%23fb923c'/%3E%3C/svg%3E", sizes: "512x512", type: "image/svg+xml" }
+  ]
+};
+const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
+document.getElementById('pwa-manifest').href = URL.createObjectURL(blob);
+
+// Service Worker inline
+if ('serviceWorker' in navigator) {
+  const swCode = `
+    const CACHE = 'scovolini-v1';
+    self.addEventListener('install', e => {
+      e.waitUntil(caches.open(CACHE).then(c => c.addAll(['.'])));
+      self.skipWaiting();
+    });
+    self.addEventListener('activate', e => {
+      e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))));
+      self.clients.claim();
+    });
+    self.addEventListener('fetch', e => {
+      e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+    });
+  `;
+  const swBlob = new Blob([swCode], {type: 'application/javascript'});
+  const swUrl = URL.createObjectURL(swBlob);
+  navigator.serviceWorker.register(swUrl).catch(() => {});
+}
+</script>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242736;
+    --border: #2e3247;
+    --text: #e8eaf0;
+    --text-dim: #6b7090;
+    --green: #4ade80;
+    --yellow: #fde047;
+    --orange: #fb923c;
+    --none-color: #2e3247;
+    --accent: #818cf8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: Georgia, serif;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 12px 48px;
+    overflow-y: auto;
+  }
+
+  h1 {
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 28px;
+    font-weight: normal;
+  }
+
+  .arch-block {
+    width: 100%;
+    max-width: 340px;
+  }
+
+  .arch-label {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    text-align: center;
+    margin-bottom: 2px;
+  }
+
+  svg.arch {
+    width: 100%;
+    display: block;
+    overflow: visible;
+  }
+
+  circle.gap {
+    cursor: pointer;
+  }
+  circle.gap:active { opacity: 0.6; }
+
+  .legend {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    margin-top: 20px;
+    flex-wrap: wrap;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .ldot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+
+  .hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center;
+    margin-top: 10px;
+    opacity: 0.6;
+  }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 200;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: 20px 20px 0 0;
+    padding: 22px 20px 44px;
+    width: 100%;
+    max-width: 420px;
+    border-top: 1px solid var(--border);
+  }
+  .modal-title {
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 18px;
+    text-align: center;
+  }
+  .color-options { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+  .color-opt {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    padding: 12px 6px; border-radius: 12px; border: 2px solid transparent;
+    cursor: pointer; background: var(--surface2); transition: border-color 0.15s;
+  }
+  .color-opt.selected { border-color: var(--accent); }
+  .color-opt:active { opacity: 0.7; }
+  .cswatch { width: 30px; height: 30px; border-radius: 50%; }
+  .cswatch.none   { background: var(--none-color); border: 2px solid #444; }
+  .cswatch.green  { background: var(--green); }
+  .cswatch.yellow { background: var(--yellow); }
+  .cswatch.orange { background: var(--orange); }
+  .color-opt-label { font-size: 10px; color: var(--text-dim); }
+  .modal-close {
+    margin-top: 16px; width: 100%; padding: 13px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text-dim); font-size: 14px;
+    cursor: pointer; font-family: inherit;
+  }
+
+  /* Tracker */
+  .tracker {
+    width: 100%;
+    max-width: 340px;
+    margin-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .tracker-title {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    text-align: center;
+    margin-bottom: 4px;
+  }
+  .tracker-row {
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--border);
+  }
+  .tracker-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    flex-shrink: 0;
+  }
+  .tracker-dots {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    flex: 1;
+    justify-content: center;
+  }
+  .use-dot {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: var(--surface2);
+    flex-shrink: 0;
+    transition: background 0.2s;
+  }
+  .use-dot.used { background: var(--dot-color); border-color: var(--dot-color); }
+  .use-dot.warn { background: #ef4444; border-color: #ef4444; }
+  .tracker-btn {
+    font-size: 11px;
+    padding: 5px 9px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: background 0.15s;
+  }
+  .tracker-btn:active { background: var(--border); }
+  .tracker-btn.use-btn { border-color: var(--dot-color); color: var(--dot-color); }
+  .tracker-btn.reset-btn { font-size: 10px; }
+  .tracker-count {
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    min-width: 60px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .tracker-count.warn { color: #ef4444; }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 28px; left: 50%;
+    transform: translateX(-50%) translateY(16px);
+    background: var(--accent); color: #fff;
+    padding: 9px 20px; border-radius: 30px; font-size: 12px;
+    opacity: 0; transition: opacity 0.25s, transform 0.25s;
+    pointer-events: none; z-index: 300;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+
+<h1>Scovolini</h1>
+
+<div class="arch-block">
+  <div class="arch-label">Arcata superiore</div>
+  <svg class="arch" id="svg-upper" viewBox="0 0 320 155"></svg>
+</div>
+
+<div class="arch-block" style="margin-top:14px">
+  <div class="arch-label">Arcata inferiore</div>
+  <svg class="arch" id="svg-lower" viewBox="0 0 320 155"></svg>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="ldot" style="background:var(--green)"></div>Verde</div>
+  <div class="legend-item"><div class="ldot" style="background:var(--yellow)"></div>Giallo</div>
+  <div class="legend-item"><div class="ldot" style="background:var(--orange)"></div>Arancione</div>
+  <div class="legend-item"><div class="ldot" style="background:var(--none-color);border:1px solid #555"></div>Nessuno</div>
+</div>
+<p class="hint">Tocca uno spazio colorato per modificarlo</p>
+
+<!-- Tracker -->
+<div class="tracker">
+  <div class="tracker-title">Vita scovolini</div>
+  <div class="tracker-row" id="track-green" style="--dot-color: var(--green)">
+    <div class="tracker-btns">
+      <button class="tracker-btn use-btn" onclick="addUse('green')">Usato</button>
+      <button class="tracker-btn reset-btn" onclick="resetUse('green')">Nuovo</button>
+    </div>
+    <div class="tracker-dots" id="dots-green"></div>
+    <span class="tracker-count" id="count-green"></span>
+  </div>
+  <div class="tracker-row" id="track-yellow" style="--dot-color: var(--yellow)">
+    <div class="tracker-btns">
+      <button class="tracker-btn use-btn" onclick="addUse('yellow')">Usato</button>
+      <button class="tracker-btn reset-btn" onclick="resetUse('yellow')">Nuovo</button>
+    </div>
+    <div class="tracker-dots" id="dots-yellow"></div>
+    <span class="tracker-count" id="count-yellow"></span>
+  </div>
+  <div class="tracker-row" id="track-orange" style="--dot-color: var(--orange)">
+    <div class="tracker-btns">
+      <button class="tracker-btn use-btn" onclick="addUse('orange')">Usato</button>
+      <button class="tracker-btn reset-btn" onclick="resetUse('orange')">Nuovo</button>
+    </div>
+    <div class="tracker-dots" id="dots-orange"></div>
+    <span class="tracker-count" id="count-orange"></span>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-title" id="modal-title">Spazio</div>
+    <div class="color-options">
+      <div class="color-opt" onclick="selectColor('none')">
+        <div class="cswatch none"></div><span class="color-opt-label">Nessuno</span>
+      </div>
+      <div class="color-opt" onclick="selectColor('green')">
+        <div class="cswatch green"></div><span class="color-opt-label">Verde</span>
+      </div>
+      <div class="color-opt" onclick="selectColor('yellow')">
+        <div class="cswatch yellow"></div><span class="color-opt-label">Giallo</span>
+      </div>
+      <div class="color-opt" onclick="selectColor('orange')">
+        <div class="cswatch orange"></div><span class="color-opt-label">Arancione</span>
+      </div>
+    </div>
+    <button class="modal-close" onclick="closeModal()">Annulla</button>
+  </div>
+</div>
+
+<div class="toast" id="toast">Salvato ✓</div>
+
+<script>
+// ── Data ──────────────────────────────────────────────────────────
+// 16 tooth slots, index 0 = patient's right = screen left
+// Upper missing: 3rd from right = idx 2; 5th from left = idx 11; 2nd from left = idx 13
+const UPPER_N = 16;
+const LOWER_N = 16;
+const UPPER_MISSING = new Set([2, 11, 14]);
+const LOWER_MISSING = new Set();
+
+function loadState() {
+  try { const s = localStorage.getItem('scovolini3'); return s ? JSON.parse(s) : {upper:{},lower:{}}; }
+  catch { return {upper:{},lower:{}}; }
+}
+function saveState() { localStorage.setItem('scovolini3', JSON.stringify(state)); }
+let state = loadState();
+
+// ── Geometry ──────────────────────────────────────────────────────
+/*
+  viewBox 320×155
+
+  Upper arch = ∩ (dome up):
+    Two ends at bottom, apex at top.
+    Parametric: t goes from 0 to π
+      x(t) = cx + rx * cos(t)    [t=0 → right end, t=π → left end]
+      y(t) = apexY + ry * sin(t) [sin>0 so y > apexY → apex is at MIN y = apexY]
+    Wait — sin(t) ≥ 0, so the curve goes FROM apexY UPWARD... no.
+    In SVG y increases downward. So:
+      y(t) = baseY - ry * sin(t)
+    where baseY is the y of the two endpoints (bottom), and apex (t=π/2) is at baseY - ry (top). ✓
+
+  Lower arch = ∪ (cup down):
+    Two ends at top, apex at bottom.
+      y(t) = baseY + ry * sin(t)
+    where baseY is the y of the endpoints (top), apex at baseY + ry (bottom). ✓
+
+  Tooth orientation: each tooth rect rotated perpendicular to the arch
+    (i.e. aligned along the RADIUS / normal direction).
+    Normal at t: points outward from the ellipse center.
+    For ∩ upper: outward = away from center (cx, baseY), i.e. normal angle = atan2(-(baseY-ry*sin(t) - baseY), x - cx)
+    Simpler: the outward normal angle at parameter t on the ellipse is:
+      θ = atan2(sin(t)/ry, cos(t)/rx)   (gradient of the ellipse equation)
+    For teeth we want the tooth's LONG axis aligned with this normal.
+    Since rect is drawn vertically by default, we rotate by (normalAngle - 90°) or similar.
+
+  Let me just use: tooth rotation = atan2(sin(t)*rx, cos(t)*ry) which is the normal direction angle,
+  then the tooth rect (tall = along normal) is rotated by that.
+*/
+
+const VW = 320, VH = 155;
+const CX = VW / 2;
+const RX = 132, RY = 110;
+const UPPER_BASE_Y = 142;  // y of arch endpoints for upper (∩)
+const LOWER_BASE_Y = 13;   // y of arch endpoints for lower (∪)
+
+function buildPoints(N, missing, isUpper) {
+  const pts = [];
+
+
+
+
+
+  // Lower: i=0=left screen, Upper: mirrored i=0=right screen
+  for (let i = 0; i < N; i++) {
+    const frac = isUpper ? i / (N - 1) : 1 - i / (N - 1);
+    const t = Math.PI * frac;
+    const cosT = Math.cos(t), sinT = Math.sin(t); // sinT ≥ 0 always in [0,π]
+    const x = CX + RX * cosT;
+    let y, normalAngleDeg;
+
+    if (isUpper) {
+      // ∩: y = baseY - ry*sin(t)  → apex (t=π/2) at top
+      y = UPPER_BASE_Y - RY * sinT;
+      // Normal points upward-outward from center (CX, UPPER_BASE_Y)
+      // Normal vector: (cosT/RX, -sinT/RY) unnormalized → atan2(-sinT/RY, cosT/RX)
+      // Tooth long axis along normal → rotate rect by normalAngle
+      normalAngleDeg = Math.atan2(-sinT / RY, cosT / RX) * 180 / Math.PI;
+    } else {
+      // ∪: y = baseY + ry*sin(t)  → apex (t=π/2) at bottom
+      y = LOWER_BASE_Y + RY * sinT;
+      // Normal points downward-outward
+      normalAngleDeg = Math.atan2(sinT / RY, cosT / RX) * 180 / Math.PI;
+    }
+
+    pts.push({ x, y, angle: normalAngleDeg, missing: missing.has(i) });
+  }
+  return pts;
+}
+
+// ── Render ────────────────────────────────────────────────────────
+const NS = 'http://www.w3.org/2000/svg';
+const COLORS = { none:'#2e3247', green:'#4ade80', yellow:'#fde047', orange:'#fb923c' };
+const TW = 20, TH = 13;
+
+function renderArch(svgId, N, missing, archKey, isUpper) {
+  const svg = document.getElementById(svgId);
+  svg.innerHTML = '';
+  const pts = buildPoints(N, missing, isUpper);
+
+  // Gum band
+  const presentPts = pts.filter(p => !p.missing);
+  if (presentPts.length > 1) {
+    let d = '';
+    pts.forEach((p, i) => {
+      if (p.missing) return;
+      d += (d === '' ? 'M ' : 'L ') + p.x.toFixed(1) + ' ' + p.y.toFixed(1) + ' ';
+    });
+    const gum = document.createElementNS(NS, 'path');
+    gum.setAttribute('d', d);
+    gum.setAttribute('fill', 'none');
+    gum.setAttribute('stroke', '#1c2030');
+    gum.setAttribute('stroke-width', '22');
+    gum.setAttribute('stroke-linecap', 'round');
+    gum.setAttribute('stroke-linejoin', 'round');
+    svg.appendChild(gum);
+  }
+
+  // Gap dots (between consecutive present teeth)
+  for (let i = 0; i < N - 1; i++) {
+    if (missing.has(i) || missing.has(i + 1)) continue;
+    const gapKey = `${i}-${i+1}`;
+    const color = (state[archKey] && state[archKey][gapKey]) || 'none';
+    const pA = pts[i], pB = pts[i + 1];
+    const mx = (pA.x + pB.x) / 2;
+    const my = (pA.y + pB.y) / 2;
+
+    const c = document.createElementNS(NS, 'circle');
+    c.setAttribute('cx', mx.toFixed(1));
+    c.setAttribute('cy', my.toFixed(1));
+    c.setAttribute('r', '7');
+    c.setAttribute('fill', COLORS[color]);
+    c.classList.add('gap');
+    if (color === 'none') { c.setAttribute('stroke', '#556'); c.setAttribute('stroke-width', '1.5'); }
+    c.addEventListener('click', () => openModal(archKey, gapKey, i, isUpper));
+    svg.appendChild(c);
+  }
+
+  // Teeth
+  for (let i = 0; i < N; i++) {
+    const p = pts[i];
+    if (p.missing) continue;
+    const r = document.createElementNS(NS, 'rect');
+    r.setAttribute('x', (p.x - TW / 2).toFixed(1));
+    r.setAttribute('y', (p.y - TH / 2).toFixed(1));
+    r.setAttribute('width', TW);
+    r.setAttribute('height', TH);
+    r.setAttribute('rx', '2.5');
+    const isCentral = (i === 7 || i === 8);
+    r.setAttribute('fill', isCentral ? '#9aa0b8' : '#c8cde8');
+    r.setAttribute('transform', `rotate(${p.angle.toFixed(1)},${p.x.toFixed(1)},${p.y.toFixed(1)})`);
+    svg.appendChild(r);
+  }
+}
+
+function renderAll() {
+  renderArch('svg-upper', UPPER_N, UPPER_MISSING, 'upper', true);
+  renderArch('svg-lower', LOWER_N, LOWER_MISSING, 'lower', false);
+}
+
+// ── Modal ─────────────────────────────────────────────────────────
+let activeGap = null, activeArch = null;
+
+function openModal(arch, gapKey, idx, isUpper) {
+  activeGap = gapKey; activeArch = arch;
+  const side = isUpper ? 'Sup.' : 'Inf.';
+  document.getElementById('modal-title').textContent = `${side} — spazio ${idx + 1}`;
+  const current = (state[arch] && state[arch][gapKey]) || 'none';
+  const cols = ['none', 'green', 'yellow', 'orange'];
+  document.querySelectorAll('.color-opt').forEach((el, i) => el.classList.toggle('selected', cols[i] === current));
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  activeGap = null; activeArch = null;
+}
+
+function selectColor(color) {
+  if (!activeGap) return;
+  if (!state[activeArch]) state[activeArch] = {};
+  state[activeArch][activeGap] = color;
+  saveState();
+  closeModal();
+  renderAll();
+  const t = document.getElementById('toast');
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1400);
+}
+
+document.getElementById('modal').addEventListener('click', e => { if (e.target === e.currentTarget) closeModal(); });
+
+// ── Tracker ───────────────────────────────────────────────────────
+const MAX_USES = 8;
+const BRUSH_COLORS = ['green', 'yellow', 'orange'];
+
+function loadTracker() {
+  try { const s = localStorage.getItem('tracker3'); return s ? JSON.parse(s) : {green:0,yellow:0,orange:0}; }
+  catch { return {green:0,yellow:0,orange:0}; }
+}
+function saveTracker() { localStorage.setItem('tracker3', JSON.stringify(tracker)); }
+let tracker = loadTracker();
+
+function renderTracker() {
+  BRUSH_COLORS.forEach(c => {
+    const uses = tracker[c];
+    const warn = uses >= MAX_USES;
+    const dotsEl = document.getElementById(`dots-${c}`);
+    dotsEl.innerHTML = '';
+    for (let i = 0; i < MAX_USES; i++) {
+      const d = document.createElement('div');
+      d.className = 'use-dot' + (i < uses ? (warn ? ' warn' : ' used') : '');
+      dotsEl.appendChild(d);
+    }
+    const countEl = document.getElementById(`count-${c}`);
+    countEl.textContent = uses === 0 ? '' : `${uses} utilizzat${uses === 1 ? 'o' : 'i'}`;
+    countEl.className = 'tracker-count' + (warn ? ' warn' : '');
+  });
+}
+
+function addUse(color) {
+  if (tracker[color] < MAX_USES) { tracker[color]++; saveTracker(); renderTracker(); }
+}
+function resetUse(color) {
+  tracker[color] = 0; saveTracker(); renderTracker();
+}
+
+renderTracker();
+renderAll();
+</script>
+</body>
+</html>
